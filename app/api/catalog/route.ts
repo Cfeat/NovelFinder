@@ -1,5 +1,5 @@
 import { readCatalog, syncCatalog } from "@/db/catalog";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+import { isLocalRequest } from "@/lib/local-request";
 export const dynamic = "force-dynamic";
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });
 export async function GET() {
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const raw = await request.text();
     const origin = request.headers.get("origin");
     if (origin && origin !== new URL(request.url).origin) return json({ error: "请求来源无效。" }, 403);
-    if (!(await getChatGPTUser())) return json({ error: "请登录后更新书库。" }, 401);
+    if (!isLocalRequest(request)) return json({ error: "书源更新仅在本地运行时可用。" }, 403);
     if (raw.length > 1000) return json({ error: "请求过长。" }, 413);
     let input: unknown; try { input = JSON.parse(raw); } catch { return json({ error: "请求格式无效。" }, 400); }
     if (!input || typeof input !== "object" || Object.keys(input).some(k => k !== "force") || ("force" in input && typeof input.force !== "boolean")) return json({ error: "请求格式无效。" }, 400);

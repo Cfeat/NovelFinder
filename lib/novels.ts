@@ -27,19 +27,86 @@ export function preferenceTags(favorites: Favorite[]) {
   for (const book of favorites) for (const tag of book.tags) counts.set(tag, (counts.get(tag) || 0) + 1);
   return [...counts].sort((a, b) => b[1] - a[1]);
 }
-export type Recommendation = { book: Novel; score: number; shared: Tag[]; closest?: Favorite; reason: string; level: string };
-export function recommend(favorites: Favorite[], catalog: Novel[] = novels): Recommendation[] {
-  const profile = preferenceTags(favorites);
-  const weights = new Map(profile.map(([tag, count]) => [tag, count / Math.max(1, favorites.length) * Math.log(1 + catalog.length / (1 + catalog.filter(n => n.tags.includes(tag)).length))]));
+export type ExplorationMode = "focused" | "balanced" | "explore";
+export type BookFeedback = { book: Novel; kind: "dismissed" | "read"; at: number };
+export type RecommendationOptions = {
+  preferredTags?: Tag[];
+  blockedTags?: Tag[];
+  feedback?: BookFeedback[];
+  exploration?: ExplorationMode;
+};
+export type Recommendation = {
+  book: Novel; score: number; shared: Tag[]; closest?: Favorite;
+  reason: string; level: string; channels: string[]; exploration?: boolean;
+};
+
+// A transparent content-based ranker. We do not have platform reading logs,
+// popularity statistics or a cross-reader interaction matrix to train on.
+export function recommend(favorites: Favorite[], catalog: Novel[] = novels, options: RecommendationOptions = {}): Recommendation[] {
+  const preferred = [...new Set(options.preferredTags || [])].filter(t => !(options.blockedTags || []).includes(t));
+  const counts = new Map(preferenceTags(favorites));
+  const rarity = new Map(TAGS.map(tag => [tag, Math.log(1 + catalog.length / (1 + catalog.filter(n => n.tags.includes(tag)).length))]));
+  const weights = new Map(TAGS.map(tag => [tag, ((counts.get(tag) || 0) / Math.max(1, favorites.length) + (preferred.includes(tag) ? 1.5 : 0)) * (rarity.get(tag) || 0)]));
   const total = [...weights.values()].reduce((a, b) => a + b, 0);
-  return catalog.filter(n => !favorites.some(f => f.id === n.id || normalizeTitle(f.title) === normalizeTitle(n.title))).map(book => {
-    const neighbors = favorites.map(f => ({ f, shared: book.tags.filter(t => f.tags.includes(t)).sort((a, b) => (weights.get(b) || 0) - (weights.get(a) || 0)), similarity: book.tags.filter(t => f.tags.includes(t)).length / Math.sqrt(Math.max(1, book.tags.length * f.tags.length)) + (book.author && book.author === f.author ? 0.14 : 0) })).sort((a, b) => b.similarity - a.similarity);
+  const personalized = favorites.length > 0 || preferred.length > 0;
+  const excluded = [...favorites, ...(options.feedback || []).map(f => f.book)];
+  const excludedIds = new Set(excluded.map(b => b.id));
+  const excludedTitles = new Set(excluded.map(b => normalizeTitle(b.title)));
+  const eligible = catalog.filter(b => !excludedIds.has(b.id) && !excludedTitles.has(normalizeTitle(b.title)) && !b.tags.some(t => options.blockedTags?.includes(t)));
+  const order = new Map(catalog.map((b, i) => [b.id, i]));
+  return eligible.map(book => {
+    const neighbors = favorites.map(f => {
+      const shared = book.tags.filter(t => f.tags.includes(t)).sort((a, b) => (weights.get(b) || 0) - (weights.get(a) || 0));
+      const sum = (tags: Tag[]) => tags.reduce((s, t) => s + (rarity.get(t) || 0), 0);
+      const similarity = sum(shared) / (Math.sqrt(sum(book.tags) * sum(f.tags)) || 1);
+      return { f, shared, similarity };
+    }).sort((a, b) => b.similarity - a.similarity);
     const nearest = neighbors[0];
-    const coverage = book.tags.reduce((a, t) => a + (weights.get(t) || 0), 0) / (total || 1);
-    const score = (nearest?.similarity || 0) * 0.65 + coverage * 0.35;
-    const shared = book.tags.filter(t => weights.has(t)).sort((a, b) => (weights.get(b) || 0) - (weights.get(a) || 0));
-    const sameAuthor = nearest && !!book.author && nearest.f.author === book.author;
-    const reason = nearest && nearest.shared.length ? `你喜欢《${nearest.f.title}》里的${nearest.shared.slice(0, 2).join("、")}元素，这本书延续了这些阅读体验${sameAuthor ? "，也出自同一位作者" : ""}。` : sameAuthor ? `同样出自${book.author}，可以试试这位作者的另一种故事。` : favorites.length ? "与现有喜好的共同点较少，适合想换一种阅读体验时尝试。" : "先从不同题材的作品中挑一本。添加喜欢的小说后，这里会变成你的专属推荐。";
-    return { book, score, shared, closest: nearest?.similarity ? nearest.f : undefined, reason, level: !favorites.length ? "书库精选" : score >= 0.58 ? "高度契合" : score >= 0.32 ? "值得一试" : "探索推荐" };
-  }).sort((a, b) => b.score - a.score || catalog.indexOf(a.book) - catalog.indexOf(b.book));
+    const sameAuthor = !!book.author && favorites.some(f => normalizeTitle(f.author) === normalizeTitle(book.author));
+    const sameGenre = !!book.genre && book.genre !== "未分类" && book.genre !== "自定义" && favorites.some(f => f.genre === book.genre);
+    const coverage = book.tags.reduce((s, t) => s + (weights.get(t) || 0), 0) / (total || 1);
+    const explicitShared = book.tags.filter(t => preferred.includes(t));
+    const explicitCoverage = explicitShared.length / (preferred.length || 1);
+    const score = personalized ? Math.min(1, Math.max(0, favorites.length
+      ? (nearest?.similarity || 0) * .48 + coverage * .32 + explicitCoverage * .12 + (sameAuthor ? .08 : 0)
+      : coverage * .65 + explicitCoverage * .35)) : 0;
+    const shared = book.tags.filter(t => (weights.get(t) || 0) > 0).sort((a, b) => (weights.get(b) || 0) - (weights.get(a) || 0));
+    const channels = [nearest?.shared.length ? "相似作品" : "", explicitShared.length ? "主动偏好" : "", sameAuthor ? "同作者" : "", sameGenre ? "相同分类" : ""].filter(Boolean);
+    const reason = nearest?.shared.length
+      ? `与你喜欢的《${nearest.f.title}》共有${nearest.shared.slice(0, 2).join("、")}元素${sameAuthor ? "；作者也在你的喜好书单中" : ""}。${explicitShared.length ? `同时符合你主动选择的${explicitShared.slice(0, 2).join("、")}偏好。` : ""}`
+      : explicitShared.length ? `符合你主动选择的${explicitShared.slice(0, 3).join("、")}元素；依据公开分类或已整理标签匹配。`
+      : sameAuthor ? `${book.author}也在你的喜好书单中，可以了解这位作者的另一部作品。`
+      : sameGenre ? `与你的喜好作品同属${book.genre}分类，细分元素的共同点较少，可作为探索候选。`
+      : personalized ? "与现有偏好的共同点较少，作为不同阅读方向的探索候选。"
+      : "先展示已整理书目。添加喜欢的小说或选择阅读元素后，会按你的偏好重新排序。";
+    return { book, score, shared, closest: nearest?.similarity ? nearest.f : undefined, reason, channels: channels.length ? channels : [personalized ? "兴趣探索" : "书库精选"], level: !personalized ? "书库精选" : score >= .58 ? "高度契合" : score >= .28 ? "值得一试" : "探索推荐" };
+  }).sort((a, b) => b.score - a.score || (order.get(a.book.id) || 0) - (order.get(b.book.id) || 0));
+}
+
+function overlap(a: Novel, b: Novel) {
+  const union = new Set([...a.tags, ...b.tags]).size;
+  return union ? a.tags.filter(t => b.tags.includes(t)).length / union : 0;
+}
+
+// Re-rank a small pool: preserve relevance while reducing repeated tags/authors.
+// Exploration slots are explicit and never presented as high-confidence matches.
+export function recommendFeed(favorites: Favorite[], catalog: Novel[], options: RecommendationOptions = {}, limit = 24): Recommendation[] {
+  const ranked = recommend(favorites, catalog, options);
+  const selected: Recommendation[] = [];
+  const selectedIds = new Set<string>();
+  const knownTags = new Set([...favorites.flatMap(b => b.tags), ...(options.preferredTags || [])]);
+  const interval = { focused: 0, balanced: 6, explore: 3 }[options.exploration || "balanced"];
+  const personalized = favorites.length > 0 || !!options.preferredTags?.length;
+  const target = Math.min(Math.max(0, Math.floor(limit)), ranked.length);
+  while (selected.length < target) {
+    const recent = selected.slice(-4);
+    const exploreSlot = personalized && interval > 0 && (selected.length + 1) % interval === 0;
+    const exploratory = exploreSlot ? ranked.filter(r => !selectedIds.has(r.book.id) && r.score < .28 && r.book.tags.some(t => !knownTags.has(t))) : [];
+    const pool = exploratory.length ? exploratory : ranked.filter(r => !selectedIds.has(r.book.id)).slice(0, 80);
+    const adjusted = (r: Recommendation) => r.score - .16 * Math.max(0, ...recent.map(s => overlap(r.book, s.book))) - .10 * Math.min(2, recent.filter(s => !!r.book.author && s.book.author === r.book.author).length);
+    const choice = pool.reduce((best, r) => adjusted(r) > adjusted(best) ? r : best);
+    const item = exploratory.length ? { ...choice, exploration: true, level: "探索推荐", channels: ["兴趣探索"], reason: `尝试书单以外的${choice.book.tags.filter(t => !knownTags.has(t)).slice(0, 2).join("、")}元素。这是探索候选，可用“不感兴趣”排除。` } : choice;
+    selected.push(item); selectedIds.add(item.book.id);
+  }
+  return selected;
 }
