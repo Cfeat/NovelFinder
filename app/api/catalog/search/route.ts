@@ -1,6 +1,6 @@
 import { searchJinjiang } from "@/lib/catalog/adapters";
 import { cacheBooks, readCatalog } from "@/db/catalog";
-import { favoritesDb } from "@/db/favorites";
+import { favoritesDb } from "@/db/client";
 import { isLocalRequest } from "@/lib/local-request";
 export const dynamic = "force-dynamic";
 const json = (value: unknown, status = 200) => Response.json(value, { status, headers: { "Cache-Control": "private, no-store" } });

@@ -1,46 +1,76 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-/.pnp
+# Dependencies and package-manager caches
+node_modules/
+.pnp
 .pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
+.yarn/
+.npm/
+.pnpm-store/
 
-# testing
-/coverage
-
-# next.js
+# Generated application output and compiler caches
 /.next/
 /.vinext/
+/dist/
 /out/
+/.vite/
+*.tsbuildinfo
+next-env.d.ts
 
-# misc
-.DS_Store
+# Local databases, tool state and former hosting bindings
+/.wrangler/
+/.sites-runtime/
+/.openai/
+/.vercel/
+/.netlify/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+
+# Environment files and private keys
+.env
+.env.*
+!.env.example
+!.env.sample
 *.pem
+*.key
+*.p12
+*.pfx
 
-# debug
+# Test reports and logs
+/coverage/
+/playwright-report/
+/test-results/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
-
-# vercel
-.vercel
-
-# typescript
-next-env.d.ts
-/dist/
-/.wrangler/
-# Checkout-local execution profile and tool state; never publish them.
-/.sites-runtime/
+# Local backups, exports, agent state and temporary work
+/.local-backup/
 /.agents/
 /.codex/
 /outputs/
 /work/
+/tmp/
+/temp/
+/*.zip
+/*.tar
+/*.tar.gz
+/novel-finder*-preview.*
+/novel-finder-sources.*
+/拾页-本地书单*.json
+
+# Editor and OS files
+/.idea/
+/.vscode/
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
+# build/ and vendor/ contain required source, not generated output.
