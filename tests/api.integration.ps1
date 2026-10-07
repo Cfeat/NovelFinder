@@ -18,6 +18,17 @@ $novelAnon = Send-NovelRequest 'GET' $null $null
 Assert-Novel ($novelAnon.Status -eq 200 -and -not $novelAnon.Data.signedIn) 'Anonymous read failed'
 Assert-Novel ((Send-NovelRequest 'POST' @{id='mysteries'} $null).Status -eq 401) 'Anonymous write must be rejected'
 try {
+  $novelCatalog = Send-NovelRequest 'GET' $null $novelUserA '/api/catalog'
+  Assert-Novel ($novelCatalog.Status -eq 200 -and $novelCatalog.Data.books.Count -gt 700 -and $novelCatalog.Data.coverage -eq 'partial') 'Unified catalog failed'
+  Assert-Novel ((Send-NovelRequest 'POST' @{force=$false} $null '/api/catalog').Status -eq 401) 'Anonymous catalog sync allowed'
+  Assert-Novel ((Send-NovelRequest 'POST' @{force=$false} $novelUserA '/api/catalog' @{Origin='https://other.invalid'}).Status -eq 403) 'Cross-origin sync allowed'
+  Assert-Novel ((Send-NovelRequest 'GET' $null $null '/api/catalog/search?q=test').Status -eq 401) 'Anonymous public search allowed'
+  $novelPlatformBook = $novelCatalog.Data.books | Where-Object platform -eq 'fanqie' | Select-Object -First 1
+  $novelPlatformSave = Send-NovelRequest 'POST' @{id=$novelPlatformBook.id} $novelUserA
+  Assert-Novel ($novelPlatformSave.Status -eq 201) 'Platform favorite save failed'
+  $novelReloaded = (Send-NovelRequest 'GET' $null $novelUserA).Data.favorites[0]
+  Assert-Novel ($novelReloaded.platform -eq 'fanqie' -and $novelReloaded.source -eq $novelPlatformBook.source -and $novelReloaded.providerId -eq $novelPlatformBook.providerId) 'Platform provenance lost after reload'
+  Send-NovelRequest 'DELETE' $null $novelUserA ("/api/favorites?id=" + $novelPlatformBook.id) | Out-Null
   $novelAdded = Send-NovelRequest 'POST' @{id='mysteries'} $novelUserA
   Assert-Novel ($novelAdded.Status -eq 201) ('Save failed: ' + ($novelAdded.Data | ConvertTo-Json -Depth 6 -Compress))
   Assert-Novel ($novelAdded.Data.favorites[0].title -eq '诡秘之主') 'Wrong saved title'
@@ -37,7 +48,7 @@ try {
   Assert-Novel ((Send-NovelRequest 'GET' $null $novelUserA).Data.favorites.Count -eq 2) 'Other user could remove favorite'
   Send-NovelRequest 'DELETE' $null $novelUserA '/api/favorites?id=mysteries' | Out-Null
   Assert-Novel ((Send-NovelRequest 'GET' $null $novelUserA).Data.favorites.Count -eq 1) 'Removal failed'
-  Write-Output 'API checks passed: authentication, persistence, user isolation, duplicates, validation, origin guard, custom novels, removal.'
+  Write-Output 'API checks passed: unified catalog, platform provenance persistence, sync/search guards, authentication, user isolation, duplicates, validation, custom novels, removal.'
 } finally {
   foreach ($novelUser in @($novelUserA,$novelUserB)) {
     $novelRemaining = Send-NovelRequest 'GET' $null $novelUser

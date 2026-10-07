@@ -12,3 +12,19 @@ export const favorites = sqliteTable("favorites", {
   primaryKey({ columns: [table.userId, table.id] }),
   uniqueIndex("idx_favorites_user_title").on(table.userId, table.normalizedTitle),
 ]);
+
+export const catalogBooks = sqliteTable("catalog_books", {
+  id: text("id").primaryKey(),
+  platform: text("platform").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  fetchedAt: integer("fetched_at").notNull(),
+});
+export const catalogSources = sqliteTable("catalog_sources", {
+  platform: text("platform").primaryKey(),
+  stateJson: text("state_json").notNull(),
+  checkedAt: integer("checked_at").notNull(),
+});
+export const catalogLocks = sqliteTable("catalog_locks", {
+  id: text("id").primaryKey(),
+  expiresAt: integer("expires_at").notNull(),
+});

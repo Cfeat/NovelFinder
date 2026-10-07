@@ -2,6 +2,7 @@ import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { favoritesDb, readFavorites } from "@/db/favorites";
 import { validateFavorite } from "@/lib/favorite-input";
 import { normalizeTitle } from "@/lib/novels";
+import { readCatalog } from "@/db/catalog";
 export const dynamic = "force-dynamic";
 function json(data: unknown, status = 200) {
   return Response.json(data, { status, headers: { "Cache-Control": "private, no-store", "Vary": "Cookie" } });
@@ -32,7 +33,8 @@ export async function POST(request: Request) {
     let input: unknown;
     try { input = JSON.parse(raw); } catch { return json({ error: "小说信息格式无效。" }, 400); }
     let book;
-    try { book = await validateFavorite(input); } catch (error) { return json({ error: error instanceof Error ? error.message : "小说信息无效。" }, 400); }
+    const catalog = await readCatalog();
+    try { book = await validateFavorite(input, catalog.books); } catch (error) { return json({ error: error instanceof Error ? error.message : "小说信息无效。" }, 400); }
     const result = await favoritesDb().prepare(`INSERT INTO favorites (user_id, id, normalized_title, title, author, tags_json, created_at)
       SELECT ?, ?, ?, ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM favorites WHERE user_id = ?) < 100
       ON CONFLICT DO NOTHING`).bind(user.userId, book.id, normalizeTitle(book.title), book.title, book.author, JSON.stringify(book.tags), Date.now(), user.userId).run();
