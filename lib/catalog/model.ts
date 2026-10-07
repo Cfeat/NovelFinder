@@ -35,7 +35,7 @@ export function mergeCatalog(publicBooks: Novel[]): Novel[] {
     const verified = unique.get(catalogKey(seed));
     if (!verified) return { ...seed, metadataKind: "curated" as const };
     unique.delete(catalogKey(seed));
-    return { ...verified, id: seed.id, tags: seed.tags, color: seed.color };
+    return { ...verified, id: seed.id, tags: seed.tags, tagOrigin: "curated" as const, color: seed.color };
   });
   return [...seeds, ...unique.values()];
 }

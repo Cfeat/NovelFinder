@@ -32,6 +32,7 @@ test("cross-platform deduplication includes authors and preserves existing seed 
   const base = { id: "jjwxc-10", providerId: "10", platform: "jjwxc", title: "默读", author: "priest", genre: "悬疑", tags: ["悬疑"], description: "平台简介", color: "#123456", syncedAt: 20 };
   const catalog = mergeCatalog([base, { ...base, id: "17k-11", platform: "17k", syncedAt: 10 }, { ...base, id: "jjwxc-12", title: "同名书", author: "甲" }, { ...base, id: "jjwxc-13", title: "同名书", author: "乙" }]);
   assert.equal(catalog.filter(b => b.title === "默读").length, 1); assert.equal(catalog.find(b => b.title === "默读").id, "silent");
+  assert.equal(catalog.find(b => b.title === "默读").tagOrigin, "curated");
   assert.equal(catalog.filter(b => b.title === "同名书").length, 2);
   assert.equal(uniqueBooks([base, { ...base, title: "错误重复标题" }]).length, 1);
 });

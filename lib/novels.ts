@@ -1,7 +1,7 @@
 export const TAGS = ["悬疑", "世界观", "冒险", "成长", "群像", "幽默", "权谋", "修仙", "热血", "科幻", "日常", "情感", "历史", "推理", "克系", "慢热", "轻松", "竞技", "神话", "建设"] as const;
 export type Tag = typeof TAGS[number];
 export type PlatformId = "fanqie" | "jjwxc" | "zongheng" | "17k" | "qidian" | "qimao";
-export type Novel = { id: string; title: string; author: string; genre: string; tags: Tag[]; description: string; color: string; source?: string; platform?: PlatformId; providerId?: string; syncedAt?: number; metadataKind?: "public" | "curated"; sourceTags?: string[] };
+export type Novel = { id: string; title: string; author: string; genre: string; tags: Tag[]; description: string; color: string; source?: string; platform?: PlatformId; providerId?: string; syncedAt?: number; metadataKind?: "public" | "curated"; tagOrigin?: "mapped" | "curated"; sourceTags?: string[] };
 export type Favorite = Novel & { createdAt?: number };
 export const novels: Novel[] = [
   { id: "mysteries", title: "诡秘之主", author: "爱潜水的乌贼", genre: "奇幻", tags: ["悬疑", "世界观", "冒险", "成长", "克系", "慢热"], description: "蒸汽时代的日常之下，隐藏着魔药、秘密组织与通往未知的阶梯。", color: "#293a53", source: "https://h5.if.qidian.com/h5/workSet/main?albumId=131&bookId=1010868264&catelogId=69153" },
